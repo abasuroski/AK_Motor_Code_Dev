@@ -8,11 +8,11 @@
   * then decelerates to stop at target position.
   *
   * Pins:
-  *   PA6  = STEP  (toggled in TIM3 ISR)
-  *   PA7  = DIR   (high = CW, low = CCW)
-  *   PB6  = EN    (active low — low = enabled)
+  *   PA6  = STEP  (toggled in TIM3 ISR)  — CN10 pin 13 (D12)
+  *   PA7  = DIR   (high = CW, low = CCW) — CN10 pin 15 (D11)
+  *   PB6  = EN    (active low)           — CN10 pin 17 (D10)
   *   PA5  = LD2   (onboard LED, toggles each move)
-  *   PA2  = UART TX (feedback to PC at 115200)
+  *   PA2  = UART2 TX (feedback to PC at 115200 via ST-Link)
   *
   * Timer: TIM3 with 1 MHz tick (PSC=83), variable ARR for step frequency.
   *        Each TIM3 update interrupt = one step pulse.
@@ -37,8 +37,8 @@ UART_HandleTypeDef huart2;
 //  MOTION PARAMETERS — edit these
 // ============================================================
 #define TARGET_STEPS      3200        // target position (steps from 0)
-#define MAX_VELOCITY      1600        // max speed (steps/sec)
-#define ACCELERATION      3200        // acceleration (steps/sec^2)
+#define MAX_VELOCITY      800         // max speed (steps/sec)
+#define ACCELERATION      1600        // acceleration (steps/sec^2)
 
 // ============================================================
 //  TIMER CONFIG
@@ -166,10 +166,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if (!moving) return;
 
     // Pulse STEP pin (rising edge triggers step on TMC2209)
+    // TMC2209 needs minimum ~100ns pulse, give it ~2us to be safe
     HAL_GPIO_WritePin(STEP_GPIO_Port, STEP_Pin, GPIO_PIN_SET);
-    // Brief high pulse (~1us at 84MHz is plenty)
-    __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP();
+    for (volatile int d = 0; d < 40; d++) {}
     HAL_GPIO_WritePin(STEP_GPIO_Port, STEP_Pin, GPIO_PIN_RESET);
 
     current_pos += move_dir;
@@ -190,8 +189,12 @@ int main(void)
     HAL_Init();
     SystemClock_Config();
     MX_GPIO_Init();
-    MX_TIM3_Init();
+
+    // Turn on LED immediately to confirm we got past GPIO init
+    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+
     MX_USART2_UART_Init();
+    MX_TIM3_Init();
 
     /* USER CODE BEGIN 2 */
 
@@ -205,7 +208,6 @@ int main(void)
 
     // Start move to target
     start_move(TARGET_STEPS);
-    HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 
     /* USER CODE END 2 */
 
@@ -271,7 +273,7 @@ static void MX_TIM3_Init(void)
     htim3.Init.CounterMode       = TIM_COUNTERMODE_UP;
     htim3.Init.Period            = 65535;         // will be set by start_move()
     htim3.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
-    htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+    htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
     if (HAL_TIM_Base_Init(&htim3) != HAL_OK) Error_Handler();
 }
 
@@ -328,6 +330,7 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Pull  = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(EN_GPIO_Port, &GPIO_InitStruct);
+
 
     // B1 user button (PC13)
     GPIO_InitStruct.Pin  = B1_Pin;

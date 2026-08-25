@@ -15,7 +15,7 @@ void Error_Handler(void);
 #define LD2_Pin         GPIO_PIN_5
 #define LD2_GPIO_Port   GPIOA
 
-// Stepper pins
+// Stepper pins (TMC2209)
 #define STEP_Pin        GPIO_PIN_6
 #define STEP_GPIO_Port  GPIOA
 #define DIR_Pin         GPIO_PIN_7
