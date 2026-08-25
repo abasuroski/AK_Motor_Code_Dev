@@ -38,10 +38,10 @@ UART_HandleTypeDef huart2;
 // ============================================================
 //  CONTROL PARAMETERS — edit these
 // ============================================================
-#define TARGET_POS_RAD    0.0f     // desired position  (rad)
+#define TARGET_POS_RAD    12.0f     // desired position  (rad)
 #define TARGET_VEL_RAD    0.0f     // desired velocity  (rad/s)
-#define CTRL_KP           8.0f     // position gain     (0 – 500)
-#define CTRL_KD           0.4f     // velocity gain     (0 – 5)
+#define CTRL_KP           2.0f     // position gain     (0 – 500)
+#define CTRL_KD           1.0f     // velocity gain     (0 – 5)
 #define CTRL_T_FF         0.0f     // feedforward torque (N·m)
 
 // ============================================================
@@ -61,7 +61,7 @@ UART_HandleTypeDef huart2;
 // ============================================================
 //  MOTOR CONFIG
 // ============================================================
-#define MOTOR_CAN_ID      1
+#define MOTOR_CAN_ID      104
 #define CAN_PACKET_MIT    8
 
 // ============================================================
@@ -95,40 +95,10 @@ static void MX_USART2_UART_Init(void);
 static unsigned int float_to_uint(float x, float x_min, float x_max, unsigned int bits);
 static float        uint_to_float(uint16_t x_int, float x_min, float x_max, int bits);
 static void         mit_send(float p_des, float v_des, float kp, float kd, float t_ff);
-static void         motor_enable(void);
-static void         motor_disable(void);
 static void         unpack_reply(void);
-static uint8_t      wait_for_feedback(uint32_t timeout_ms);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-
-// ----------------------------------------------------------------
-// MIT enable / disable (magic byte sequences)
-// ----------------------------------------------------------------
-static void motor_enable(void)
-{
-    uint8_t buf[8] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFC};
-    txHeader.StdId              = 0;
-    txHeader.ExtId              = (uint32_t)MOTOR_CAN_ID | ((uint32_t)CAN_PACKET_MIT << 8);
-    txHeader.IDE                = CAN_ID_EXT;
-    txHeader.RTR                = CAN_RTR_DATA;
-    txHeader.DLC                = 8;
-    txHeader.TransmitGlobalTime = DISABLE;
-    HAL_CAN_AddTxMessage(&hcan1, &txHeader, buf, &txMailbox);
-}
-
-static void motor_disable(void)
-{
-    uint8_t buf[8] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFD};
-    txHeader.StdId              = 0;
-    txHeader.ExtId              = (uint32_t)MOTOR_CAN_ID | ((uint32_t)CAN_PACKET_MIT << 8);
-    txHeader.IDE                = CAN_ID_EXT;
-    txHeader.RTR                = CAN_RTR_DATA;
-    txHeader.DLC                = 8;
-    txHeader.TransmitGlobalTime = DISABLE;
-    HAL_CAN_AddTxMessage(&hcan1, &txHeader, buf, &txMailbox);
-}
 
 // ----------------------------------------------------------------
 // Fixed-point encoding helpers
@@ -222,13 +192,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 }
 
-static uint8_t wait_for_feedback(uint32_t timeout_ms)
-{
-    uint32_t t0 = HAL_GetTick();
-    while (!fb_ready && (HAL_GetTick() - t0) < timeout_ms) {}
-    return fb_ready;
-}
-
 /* USER CODE END 0 */
 
 int main(void)
@@ -247,13 +210,6 @@ int main(void)
     HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
 
     HAL_Delay(100);
-
-    // Enable motor into MIT mode
-    motor_enable();
-    HAL_Delay(100);
-
-    // Wait for first feedback to confirm motor is alive
-    wait_for_feedback(500);
 
     // Soft-start: ramp gains from 0 to full over 1 s to avoid torque spike
     for (int i = 1; i <= 50; i++)
